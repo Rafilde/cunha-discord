@@ -22,7 +22,7 @@ defmodule Cunha.MixProject do
     [
       {:nostrum, "~> 0.10"},
       {:httpoison, "~> 1.8"},
-      {:dotenv, "~> 3.0"}
+      {:jason, "~> 1.2"}
     ]
   end
 end
