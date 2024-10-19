@@ -1,6 +1,6 @@
 import Config
 
 config :nostrum,
-  token: "<TOKEN>",
+  token: "",
   ffmpeg: nil,
   gateway_intents: [:guilds, :guild_messages, :message_content]
