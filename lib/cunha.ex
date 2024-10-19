@@ -14,21 +14,25 @@ defmodule Cunha do
       String.starts_with?(msg.content, "!ajuda") ->
         send_help_message(msg.channel_id)
 
-        String.starts_with?(msg.content, "!filme") ->
-          handle_movie_command(msg)
+      String.starts_with?(msg.content, "!filme") ->
+        handle_movie_command(msg)
 
-        String.starts_with?(msg.content, "!serie") ->
-          handle_serie_command(msg)
+      String.starts_with?(msg.content, "!serie") ->
+        handle_serie_command(msg)
 
-          String.starts_with?(msg.content, "!recomendar") ->
-            ask_for_recommendation_type(msg)
+      String.starts_with?(msg.content, "!recomendar") ->
+        ask_for_recommendation_type(msg)
 
-        true ->
-          :ignore
+      String.starts_with?(msg.content, "!trailer") ->
+        handle_trailer_command(msg)
+
+      true ->
+        :ignore
     end
   end
 
-
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
 
   def send_help_message(channel_id) do
     help_message = """
@@ -37,6 +41,7 @@ defmodule Cunha do
     - `!ajuda`: Exibe esta lista de comandos
     - `!filme [nome do filme]`: Busca informações sobre um filme
     - `!serie [nome da série]`: Busca informações sobre uma série
+    - `!trailer [nome do filme]`: Busca o trailer do filme
     - `!recomendar [filme ou serie] [gênero (opcional)]`: Recomenda um filme ou série aleatório.
       **Gêneros disponíveis para recomendação:**
       - **Filmes**: ação, aventura, comédia, drama, terror, romance, ficção científica, animação, crime, documentário, família, fantasia, história, música, mistério, guerra, faroeste, thriller
@@ -45,8 +50,8 @@ defmodule Cunha do
     Api.create_message(channel_id, help_message)
 end
 
-
-
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
 
   def handle_movie_command(msg) do
     case String.split(msg.content, " ", [parts: 2, trim: true]) do
@@ -144,7 +149,8 @@ end
     end
   end
 
-
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
 
   def ask_for_recommendation_type(msg) do
     case String.split(msg.content, " ", [parts: 3, trim: true]) do
@@ -167,7 +173,6 @@ end
         Api.create_message(msg.channel_id, "Comando inválido. Use o formato: !recomendar [filme/serie] [gênero ou 'random']")
     end
   end
-
 
   def recommend_movie(channel_id, "random") do
     url = "#{@tmdb_base_url}/movie/popular?api_key=#{@tmdb_api_key}&language=pt-BR&page=#{:rand.uniform(500)}"
@@ -333,6 +338,68 @@ end
         Api.create_message(channel_id, "Erro ao processar a resposta. Tente novamente. ❌")
     end
   end
+
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
+
+def handle_trailer_command(msg) do
+  case String.split(msg.content, " ", [parts: 2, trim: true]) do
+    ["!trailer"] ->
+      Api.create_message(msg.channel_id, "Use o comando certo gostosa: !trailer [nome do filme]")
+
+    ["!trailer", movie_name] ->
+      search_trailer(movie_name, msg.channel_id)
+
+    :ignore
+  end
+end
+
+defp search_trailer(movie_name, channel_id) do
+  url = "#{@tmdb_base_url}/search/movie?api_key=#{@tmdb_api_key}&query=#{URI.encode(movie_name)}&language=pt-BR"
+
+  case HTTPoison.get(url) do
+    {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+      case Jason.decode(body) do
+        {:ok, %{"results" => [first_movie | _]}} ->
+          movie_id = first_movie["id"]
+          fetch_trailer(movie_id, channel_id)
+
+        {:ok, %{"results" => []}} ->
+          Api.create_message(channel_id, "Nenhum filme encontrado com esse nome.")
+
+        _ ->
+          Api.create_message(channel_id, "Erro ao processar a resposta.")
+      end
+
+    {:error, _} ->
+      Api.create_message(channel_id, "Erro ao buscar o filme. Tente novamente.")
+  end
+end
+
+defp fetch_trailer(movie_id, channel_id) do
+  url = "#{@tmdb_base_url}/movie/#{movie_id}/videos?api_key=#{@tmdb_api_key}&language=pt-BR"
+
+  case HTTPoison.get(url) do
+    {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+      case Jason.decode(body) do
+        {:ok, %{"results" => trailers}} ->
+          trailer = Enum.find(trailers, fn video -> video["type"] == "Trailer" && video["site"] == "YouTube" end)
+
+          if trailer do
+            trailer_url = "https://www.youtube.com/watch?v=#{trailer["key"]}"
+            Api.create_message(channel_id, "Aqui está o trailer: #{trailer_url}")
+          else
+            Api.create_message(channel_id, "Trailer não encontrado.")
+          end
+
+        _ ->
+          Api.create_message(channel_id, "Erro ao processar a resposta.")
+      end
+
+    {:error, _} ->
+      Api.create_message(channel_id, "Erro ao buscar o trailer. Tente novamente.")
+  end
+end
 
   defp poster_url(nil), do: ""
   defp poster_url(path), do: "https://image.tmdb.org/t/p/w500#{path}"
