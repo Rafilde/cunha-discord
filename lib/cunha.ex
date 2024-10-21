@@ -4,6 +4,7 @@ defmodule Cunha do
   alias HTTPoison
 
   @tmdb_api_key ""
+  @giphy_api_key ""
   @tmdb_base_url "https://api.themoviedb.org/3"
 
   def handle_event({:MESSAGE_CREATE, msg, _ws_state}) do
@@ -26,10 +27,46 @@ defmodule Cunha do
       String.starts_with?(msg.content, "!trailer") ->
         handle_trailer_command(msg)
 
+      String.starts_with?(msg.content, "!fig") ->
+        handle_gif_command(msg)
+
       true ->
         :ignore
     end
   end
+
+  def handle_gif_command(msg) do
+    case String.split(msg.content, " ", [parts: 2, trim: true]) do
+      ["!fig"] ->
+        Api.create_message(msg.channel_id, "Use o comando: !fig [palavra-chave] para procurar uma figurinha.")
+
+      ["!fig", keyword] ->
+        case fetch_gif(keyword) do
+          {:ok, gif_url} ->
+            Api.create_message(msg.channel_id, gif_url)
+          {:error, reason} ->
+            Api.create_message(msg.channel_id, reason)
+        end
+    end
+  end
+
+    def fetch_gif(keyword) do
+      url = "https://api.giphy.com/v1/gifs/search?api_key=#{@giphy_api_key}&q=#{URI.encode(keyword)}&limit=1"
+      case HTTPoison.get(url) do
+        {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+          case Jason.decode(body) do
+            {:ok, %{"data" => [first_gif | _]}} ->
+              gif_url = first_gif["images"]["original"]["url"]
+              {:ok, gif_url}
+            {:ok, _} ->
+              {:error, "Nenhuma figurinha encontrada para #{keyword}"}
+            _ ->
+              {:error, "Erro ao decodificar a resposta do Giphy"}
+          end
+        {:error, _} ->
+          {:error, "Erro ao conectar ao Giphy"}
+      end
+    end
 
   # ----------------------------------------------------------------------
   # ----------------------------------------------------------------------
