@@ -3,6 +3,7 @@ defmodule Cunha do
   alias Nostrum.Api
   alias HTTPoison
 
+  @news_api_key ""
   @tmdb_api_key ""
   @giphy_api_key ""
   @tmdb_base_url "https://api.themoviedb.org/3"
@@ -30,43 +31,16 @@ defmodule Cunha do
       String.starts_with?(msg.content, "!fig") ->
         handle_gif_command(msg)
 
+      String.starts_with?(msg.content, "!noticias") ->
+        handle_news_command(msg)
+
+      String.starts_with?(msg.content, "!piada") ->
+        fetch_joke(msg.channel_id)
+
       true ->
         :ignore
     end
   end
-
-  def handle_gif_command(msg) do
-    case String.split(msg.content, " ", [parts: 2, trim: true]) do
-      ["!fig"] ->
-        Api.create_message(msg.channel_id, "Use o comando: !fig [palavra-chave] para procurar uma figurinha.")
-
-      ["!fig", keyword] ->
-        case fetch_gif(keyword) do
-          {:ok, gif_url} ->
-            Api.create_message(msg.channel_id, gif_url)
-          {:error, reason} ->
-            Api.create_message(msg.channel_id, reason)
-        end
-    end
-  end
-
-    def fetch_gif(keyword) do
-      url = "https://api.giphy.com/v1/gifs/search?api_key=#{@giphy_api_key}&q=#{URI.encode(keyword)}&limit=1"
-      case HTTPoison.get(url) do
-        {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-          case Jason.decode(body) do
-            {:ok, %{"data" => [first_gif | _]}} ->
-              gif_url = first_gif["images"]["original"]["url"]
-              {:ok, gif_url}
-            {:ok, _} ->
-              {:error, "Nenhuma figurinha encontrada para #{keyword}"}
-            _ ->
-              {:error, "Erro ao decodificar a resposta do Giphy"}
-          end
-        {:error, _} ->
-          {:error, "Erro ao conectar ao Giphy"}
-      end
-    end
 
   # ----------------------------------------------------------------------
   # ----------------------------------------------------------------------
@@ -79,6 +53,7 @@ defmodule Cunha do
     - `!filme [nome do filme]`: Busca informações sobre um filme
     - `!serie [nome da série]`: Busca informações sobre uma série
     - `!trailer [nome do filme]`: Busca o trailer do filme
+    - `!fig [nome da figurinha]`: Busca figurinhas no giphy
     - `!recomendar [filme ou serie] [gênero (opcional)]`: Recomenda um filme ou série aleatório.
       **Gêneros disponíveis para recomendação:**
       - **Filmes**: ação, aventura, comédia, drama, terror, romance, ficção científica, animação, crime, documentário, família, fantasia, história, música, mistério, guerra, faroeste, thriller
@@ -437,6 +412,138 @@ defp fetch_trailer(movie_id, channel_id) do
       Api.create_message(channel_id, "Erro ao buscar o trailer. Tente novamente.")
   end
 end
+
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
+
+def handle_gif_command(msg) do
+  case String.split(msg.content, " ", [parts: 2, trim: true]) do
+    ["!fig"] ->
+      Api.create_message(msg.channel_id, "Use o comando: !fig [palavra-chave] para procurar uma figurinha.")
+
+    ["!fig", keyword] ->
+      case fetch_gif(keyword) do
+        {:ok, gif_url} ->
+          Api.create_message(msg.channel_id, gif_url)
+        {:error, reason} ->
+          Api.create_message(msg.channel_id, reason)
+      end
+  end
+end
+
+  def fetch_gif(keyword) do
+    url = "https://api.giphy.com/v1/gifs/search?api_key=#{@giphy_api_key}&q=#{URI.encode(keyword)}&limit=1"
+    case HTTPoison.get(url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        case Jason.decode(body) do
+          {:ok, %{"data" => [first_gif | _]}} ->
+            gif_url = first_gif["images"]["original"]["url"]
+            {:ok, gif_url}
+          {:ok, _} ->
+            {:error, "Nenhuma figurinha encontrada para #{keyword}"}
+          _ ->
+            {:error, "Erro ao decodificar a resposta do Giphy"}
+        end
+      {:error, _} ->
+        {:error, "Erro ao conectar ao Giphy"}
+    end
+  end
+
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
+
+  def handle_news_command(msg) do
+    case String.split(msg.content, " ", [parts: 2, trim: true]) do
+      ["!noticias"] ->
+        fetch_top_headlines(msg.channel_id)
+
+      _ ->
+        Api.create_message(msg.channel_id, "Comando inválido. Use !noticias ou !noticias [categoria].")
+    end
+  end
+
+
+  defp fetch_top_headlines(channel_id) do
+    base_url = "https://newsapi.org/v2/top-headlines?country=us&apiKey=#{@news_api_key}"
+
+    case HTTPoison.get(base_url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        parse_news_response(body, channel_id)
+
+      {:error, _} ->
+        Api.create_message(channel_id, "Erro ao buscar as notícias. Tente novamente mais tarde.")
+    end
+  end
+
+  defp parse_news_response(body, channel_id) do
+    case Jason.decode(body) do
+      {:ok, %{"articles" => articles}} ->
+
+        case articles do
+          [_first_article | _] ->
+            first_five_articles = Enum.take(articles, 5)
+
+            message =
+              first_five_articles
+              |> Enum.map(fn article ->
+                title = article["title"] || "Sem título"
+                description = article["description"] || "Sem descrição"
+                url = article["url"] || "#"
+                "**#{title}**\n#{description}\n[Leia mais](#{url})\n"
+              end)
+              |> Enum.join("\n\n")
+
+            Api.create_message(channel_id, message)
+
+          [] ->
+            Api.create_message(channel_id, "Não encontrei notícias no momento.")
+        end
+
+      {:ok, _} ->
+        Api.create_message(channel_id, "Formato de resposta inesperado. Verifique o formato da API.")
+
+      {:error, error} ->
+        IO.inspect(error, label: "Erro ao decodificar JSON")
+        Api.create_message(channel_id, "Erro ao processar a resposta.")
+    end
+  end
+
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
+
+  defp fetch_joke(channel_id) do
+    url = "https://v2.jokeapi.dev/joke/Any"
+
+    case HTTPoison.get(url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        parse_joke_response(body, channel_id)
+
+      {:error, _} ->
+        Api.create_message(channel_id, "Erro ao buscar uma piada. Tente novamente mais tarde.")
+    end
+  end
+
+  defp parse_joke_response(body, channel_id) do
+    case Jason.decode(body) do
+      {:ok, %{"setup" => setup, "delivery" => delivery}} ->
+        message = "**Piada:** #{setup}\n**Resposta:** #{delivery}"
+        Api.create_message(channel_id, message)
+
+      {:ok, %{"joke" => joke}} ->
+        message = joke
+        Api.create_message(channel_id, message)
+
+      {:ok, _} ->
+        Api.create_message(channel_id, "Formato de resposta inesperado. Verifique o formato da API.")
+
+      {:error, error} ->
+        IO.inspect(error, label: "Erro ao decodificar JSON")
+        Api.create_message(channel_id, "Erro ao processar a resposta.")
+    end
+  end
+
+  # ----------------------------------------------------------------------
+  # ----------------------------------------------------------------------
 
   defp poster_url(nil), do: ""
   defp poster_url(path), do: "https://image.tmdb.org/t/p/w500#{path}"
