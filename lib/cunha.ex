@@ -54,6 +54,8 @@ defmodule Cunha do
     - `!serie [nome da série]`: Busca informações sobre uma série
     - `!trailer [nome do filme]`: Busca o trailer do filme
     - `!fig [nome da figurinha]`: Busca figurinhas no giphy
+    - `!noticias`: Exibe as últimas notícias
+    - `!piada`: Envia uma piada aleatória
     - `!recomendar [filme ou serie] [gênero (opcional)]`: Recomenda um filme ou série aleatório.
       **Gêneros disponíveis para recomendação:**
       - **Filmes**: ação, aventura, comédia, drama, terror, romance, ficção científica, animação, crime, documentário, família, fantasia, história, música, mistério, guerra, faroeste, thriller
